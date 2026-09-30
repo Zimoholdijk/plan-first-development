@@ -1,0 +1,371 @@
+---
+name: project-setup
+description: Bootstrap a new project with context docs, CLAUDE.md, overview, and all accumulated best practices. Run in any repo to set up the full development workflow.
+disable-model-invocation: false
+argument-hint: "[project name, e.g. 'task-tracker' or 'my-app']"
+---
+
+# Project Setup
+
+You are setting up a new project: $ARGUMENTS
+
+This skill creates the full project scaffolding: context directory, CLAUDE.md rules, overview doc, and working agreements, based on battle-tested conventions. It produces files that the other skills (`/discuss-feature`, `/write-prd`, `/discuss-plan`, `/write-plan`, `/plan-review`, `/implement-plan`, `/write-e2e-tests`, `/full-code-review`, `/doc-audit`, `/overnight-delivery`) depend on.
+
+---
+
+## Step 1: Detect project state
+
+Before creating anything, check what already exists:
+
+1. Run `git log --oneline -5` to see if the repo has commits
+2. Check if `.claude/CLAUDE.md` exists
+3. Check if `context/` directory exists
+4. Check if `context/overview.md` exists
+5. Read `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Gemfile`, or equivalent to detect tech stack
+6. Read the ORM or database config (e.g. `prisma/schema.prisma`, `alembic.ini`, a Django `models.py`, or equivalent) to detect ORM/DB
+7. Check for existing framework config (e.g. `next.config.*`, `vite.config.*`, Django `settings.py`, `config/routes.rb`, or equivalent)
+
+If any of `.claude/CLAUDE.md`, `context/overview.md` already exist, ask the user whether to replace or skip them. Never silently overwrite.
+
+---
+
+## Step 2: Gather project info from the user
+
+Ask the user these questions (skip any that were auto-detected in Step 1):
+
+1. **What are you building?** (1-2 sentence description, this goes in the overview)
+2. **Project kind and tech stack**: what kind of project it is (web app, mobile app, CLI, library, service, data pipeline), then confirm or correct what was auto-detected (language and runtime, plus whichever of frontend, API, database, and auth apply). Ask only the follow-up questions below that fit this kind of project.
+3. **Architecture**: the main components and how they talk (processes, services, packages), and how it runs in dev
+4. **Auth approach** (if any): OAuth, session-based, JWT, magic link, API keys, etc.?
+5. **Data storage** (if any): what database or storage, any soft-delete conventions, any existing models?
+6. **Deployment target**: where will this run? (helps inform env var conventions)
+7. **Local-dev gotchas**: any non-default ports, service quirks, pre-existing build/lint errors, or env vars that have bitten before? (these go in CLAUDE.md so a fresh session doesn't waste its first turns rediscovering them)
+8. **Testing reality**: what test infrastructure exists today, if any? Can new features assume a suite?
+9. **Issue tracker / board**: which tracker does this project use, and what's the specific target? (e.g. GitHub Issues: `owner/repo`; Linear: team and project keys; Notion: backlog data source ID). This is what `discuss-feature` reads when creating tickets (and `write-prd` when fetching one). If the global `~/.claude/CLAUDE.md` names a default tracker, confirm it applies here or override it. Skip only if the project has no board.
+
+Do NOT proceed until the user has confirmed or provided this info. The overview and CLAUDE.md must reflect the actual project, not assumptions.
+
+---
+
+## Step 3: Create directory structure
+
+```
+.claude/
+  CLAUDE.md                  # Project rules (created in Step 4)
+context/
+  overview.md                # Project overview (created in Step 5)
+```
+
+Feature directories (`context/<Feature>/`) are NOT created here: they are created by `/write-prd` when the first feature PRD is written.
+
+---
+
+## Step 4: Create `.claude/CLAUDE.md`
+
+This file contains project-specific rules that Claude must follow. Create it with the following structure, filling in project-specific details from Step 2:
+
+```markdown
+# [Project Name] Project Rules
+
+## Tech Stack
+- Runtime: [detected/confirmed]
+- Frontend: [detected/confirmed]
+- API: [detected/confirmed]
+- ORM: [detected/confirmed]
+- CSS: [detected/confirmed]
+- Auth: [detected/confirmed]
+[Add any project-specific tech notes, e.g. "the test database is recreated per run; never point tests at the dev database"]
+
+## Architecture
+[Fill in from Step 2: main components, how they communicate, and how the project runs in dev]
+
+## Local-Dev Gotchas
+[Things that have bitten before and would waste a fresh session's first turns. Examples:
+- Non-default dev server port or config
+- Docker or service naming quirks
+- Pre-existing build/lint errors that are NOT yours to fix
+- Env vars whose behavior differs from what their name suggests]
+[Fill from Step 2 question 7. Omit this section until something has actually bitten.]
+
+## File Organization
+[Map the actual project structure. List key directories and what lives where, one line each:]
+- `[directory]/`: [what lives there]
+
+## Database & Migrations *(example, SQL database)*
+- Migration files are schema-only. Never add data manipulation (UPDATE, DELETE, INSERT) to migration files. If a migration would fail due to existing data, surface it as a prerequisite for the user to handle (reset DB, seed clean data, etc.).
+- Before implementing schema changes, check whether the database has existing data that would conflict. Flag it to the user before writing any migration code.
+[Add any project-specific DB conventions, soft delete patterns, ID format, etc.]
+
+## Decision Making
+- Never accept trade-offs silently. Always surface trade-offs to the user and let them decide. This includes architectural trade-offs, known limitations, performance compromises, and security acceptances. Document the user's decision, not your own judgement.
+
+## Project-Specific Rules
+[Fill in any that apply:]
+- [API call convention, e.g. "All client-side API calls go through one shared client module"]
+- [Error response format, e.g. one consistent shape for every error]
+- [File storage convention, if applicable]
+[Leave empty if none yet, these accumulate during development.]
+[For non-obvious, load-bearing conventions (the ones where doing the "obvious" thing is wrong), capture three things: the rule, why it exists, and the path to the canonical example in the code to read before copying it. A rule without its why gets deleted by the next refactor.]
+
+## Build & Verify
+- Check existing packages before installing new ones; prefer reusing installed dependencies.
+- Check for existing components and helpers to reuse before creating new ones.
+- Run [build command] to surface specific build errors before attempting fixes. [Adapt to the toolchain.]
+- Run [lint command] to surface specific lint errors before attempting fixes.
+- Run [test command] and confirm the suite is green before considering a change done. Never weaken or skip a test to make the suite pass.
+- At task completion, review changes for type safety, unused imports/variables, and proper error handling.
+
+## Testing
+- Every aspect of code that's written gets a test. Logic gets unit tests; endpoints and module boundaries get integration tests; user-facing flows get end-to-end tests (for browser UIs, `/write-e2e-tests` with Playwright). New code without a test is incomplete.
+- Test as you build, in the same phase, not as a final clean-up pass. A phase is not done until its tests exist and pass.
+- Cover more than the happy path: error states and, where the project has them, auth boundaries (signed-out, wrong-owner, expired) and empty/loading states.
+- Tests must be deterministic and isolated: each sets up and tears down its own data, waits on application state rather than fixed sleeps, and passes in any order.
+- Critical flows must be covered by an automated test, not just a manual check, manual-only coverage regresses silently.
+[If the project has no test runner yet, the first task is to establish one (runner + e2e harness + a first passing test) before feature work. For a new TypeScript/Vite stack, Vitest is the current default (Jest-compatible API, native TS/ESM, shared Vite config); use Jest to match an existing codebase or for React Native, and Playwright for e2e. For an existing repo, adopt whatever runner is already there rather than introducing a second one. Note the chosen tools here once picked.]
+
+## TypeScript
+[Include this section only when the detected stack uses TypeScript. Omit it entirely otherwise.]
+- Never use `any`: use `unknown`, a specific type, or a generic instead.
+- Use template literals (`${variable}`) instead of `+=` string concatenation.
+- Prefer interfaces over type aliases for object shapes.
+- Comply with strict mode.
+
+## Testing Reality
+[What test infrastructure actually exists today. Whether new features can assume a suite. What to look at before adding tests. Fill from Step 2 question 8; if the answer is "none yet", say that explicitly so sessions don't invent a suite.]
+
+## Known Concerns (live, [date])
+[Real concerns verified against current code, each with a tracking ticket if one exists. Date the heading so staleness is visible. Omit this section until the first concern exists.]
+
+## Production Deploy Notes
+[Where production runs, migration ordering relative to app boot, rollback playbook. Omit until there is a production environment.]
+
+## Context
+[Ordered by trust: read top to bottom.]
+- Overview: `/context/overview.md` (primary source of truth, trust it before older docs)
+- PRD: `/context/[product-prd-name].md` (created separately if needed)
+- Feature docs: `/context/<Feature>/` with PRD, implementation plan, review-log sidecar, and progress files
+[If the project keeps older hand-written docs, list them last and mark them as potentially stale: cross-check against live code where it matters.]
+
+## Issue Tracker
+[Fill from Step 2 question 9. State the tracker and the exact target so discuss-feature can create tickets without asking. Examples:
+- GitHub Issues: `[owner/repo]`
+- Linear: team `[KEY]`, project `[name]`
+Omit this section only if the project has no board; discuss-feature then asks once whether to file a ticket and where (suggesting the default tracker from `~/.claude/CLAUDE.md`, if one is named); if the user says no, it just delivers the decision summary.]
+
+## Workflow Skills
+The plan-first skills are available: `/discuss-feature`, `/write-prd`, `/discuss-plan`, `/write-plan`, `/plan-review`, `/research`, `/implement-plan`, `/write-e2e-tests`, `/full-code-review`, `/doc-audit`, `/tradeoff-review`, `/discuss-simply`, `/overnight-delivery`. For anything non-trivial, walk the user through the planning workflow (optionally `/discuss-feature` first, then PRD, then `/discuss-plan`, then implementation plan, then implementation, with tests written as each phase lands) before writing code. The plugin also bundles the Playwright MCP (`mcp__playwright__*` browser tools) that `/write-e2e-tests` uses to drive a real browser.
+```
+
+**Important:** Only include sections that are relevant. If there's no database, omit the Database section. If the tech stack is simple, keep it brief. The CLAUDE.md should grow organically as conventions are established. Don't front-load rules that haven't been tested yet.
+
+---
+
+## Step 5: Create `context/overview.md`
+
+This is the project's living source of truth. Create it with this structure:
+
+```markdown
+# [Project Name]: Project Overview
+
+> One source of truth for project context, architecture decisions, working agreements, and key feedback.
+> Details live in feature docs under `/context/<Feature>/`. This is the summary.
+
+---
+
+## What We're Building
+
+[1-2 paragraphs from Step 2: what the product is, who it's for, core value prop]
+
+---
+
+## Tech Stack
+
+| Layer | Choice |
+|---|---|
+| Runtime | [value] |
+| Frontend | [value] |
+| API | [value] |
+| ORM | [value] |
+| Database | [value] |
+| Auth | [value] |
+| CSS | [value] |
+
+### Architecture
+
+[Prose description of how the pieces fit together: servers, middleware, auth flow, etc.]
+
+### Shared Utilities
+
+Check these before creating new constants, types, or helpers.
+
+| File | Purpose |
+|------|---------|
+[Leave empty initially, populated as utilities are created during implementation]
+
+---
+
+## Features
+
+Each feature has its own `/context/<Feature>/` folder with PRD, implementation plan, review-log sidecar, and progress docs.
+
+[None yet, features are added here as they are implemented]
+
+---
+
+## Working Agreements
+
+- **PRD first, implementation plan second, code last.** No code until plan is approved.
+- **Testable phases.** Each phase produces something independently verifiable by running it (in the UI, at the command line, via curl, or in a REPL) or by a test AND ships its own tests. Shells before detail.
+- **Test as you build.** Every aspect of code that's written gets a test in the same phase: unit tests for logic, integration tests for endpoints and module boundaries, end-to-end tests for user-facing flows. New code is not "done" until it's tested and the suite is green. No batching tests to the end.
+- **[If the project has a visual UI: primary viewport, e.g. mobile, desktop, or both.]**
+- **No auto-commits.** Claude does not commit unless explicitly asked.
+- **Document freeze.** PRDs and plans are frozen once agreed. Deviations go in `progress.md`, not by editing the plan.
+- **The overview is a summary.** Details live in feature docs. Updated only for stable project-wide decisions.
+- **Surface all trade-offs.** Never accept trade-offs silently. Document the user's decision, not Claude's judgement.
+- **[If the project has a database: its migration policy, e.g. schema-only migrations with data prerequisites flagged to the user.]**
+
+---
+
+## Key Decisions
+
+| Date | Decision |
+|------|----------|
+[Populated as decisions are made during development. Format: date + concise decision statement.]
+
+---
+
+## Deferred Items & Tech Debt
+
+### Must fix before production
+
+| Item | Notes |
+|------|-------|
+[Populated during implementation: security, compliance, infrastructure items]
+
+### Should fix before scaling
+
+| Item | Notes |
+|------|-------|
+[Populated during implementation: performance, consistency, correctness items]
+
+### Post-v1
+
+| Item | Notes |
+|------|-------|
+[Nice-to-haves, future features, polish items]
+
+---
+
+## Open Questions
+
+[Numbered list of unresolved decisions. Struck through and annotated when resolved.]
+```
+
+---
+
+## Step 6: Verify global rules exist
+
+Check if `~/.claude/CLAUDE.md` exists. If it does, read it and confirm it contains the core workflow rules. If it doesn't exist, show the user these starter defaults, adjust them together, and create the file only after they confirm. Lines marked *(example)* assume a particular stack; drop the ones that don't fit:
+
+```markdown
+# Global Rules (all projects)
+
+## Workflow
+- PRD first, implementation plan second, code last. No code until the plan is approved.
+- Each implementation phase must produce something independently verifiable by running it (in the UI, at the command line, via curl, or in a REPL) or by a test. Shells before detail.
+- Do not commit unless explicitly asked.
+
+## Decision Making
+- Never accept trade-offs silently. Always surface trade-offs to the user and let them decide. This includes architectural trade-offs, known limitations, performance compromises, and security acceptances. Document the user's decision, not your own judgement.
+
+## Code Quality
+- Before creating a constant, type, or utility, search the codebase for existing definitions. Do not redeclare, import from the shared location.
+- If the same logic appears 3+ times (across files or within one file), extract it into a helper or middleware.
+- Never write an empty catch or except block without logging, showing user feedback, or re-throwing. Silent catches hide bugs.
+- *(example, HTTP API)* Never `throw new Error(...)` in API route handlers. Always return an explicit HTTP response with a status code and structured body.
+- *(example, HTTP API)* Wrap all database calls in try/catch. Return 500 with `{ error: "Internal server error" }` on failure, never leak stack traces.
+- Keep functions under CC=15. If a function has more than ~15 branch points, refactor it.
+- *(example, React)* React components should do one thing. If a component manages more than 3 concerns, split it. Target <200 lines per file.
+- All configuration (URLs, ports, limits, feature flags) must come from the project's configuration mechanism (environment variables, config files, or build settings), never hardcoded.
+- *(if the project has a UI)* No placeholder, lorem ipsum, or TODO strings as committed UI text. All user-facing strings must be real copy.
+
+## Planning Workflow
+- When creating an implementation or refactoring plan, use `/plan-review` to run the multi-stage review workflow after drafting.
+- The workflow runs three reviewer lenses in sequence, a clarifying-reviewer (clarifying questions), a deep-critique-reviewer (deep critique with cited findings), and a red-team-reviewer (adversarial, tries to break the plan), followed by a quality/conformance check.
+- Sub-agents receive full project context (CLAUDE.md, overview, PRDs), treat them as team members with zero prior knowledge of the project.
+- The main agent exercises critical judgement on all feedback: apply it or document why not. Sub-agents are advisory, not authoritative.
+- Use judgement on when to invoke the full workflow. It's valuable for plans spanning 3+ files or involving schema/architecture changes. Skip for trivial changes.
+
+## Database & Migrations *(example, SQL database)*
+- Migration files are schema-only. Never add data manipulation (UPDATE, DELETE, INSERT) to migration files. If a migration would fail due to existing data (e.g., adding NOT NULL to a nullable column with NULL rows), surface it as a prerequisite for the user to handle (reset DB, seed clean data, etc.).
+- Before implementing schema changes, check whether the database has existing data that would conflict. Flag it to the user before writing any migration code.
+
+## Document Freeze
+- PRDs and implementation plans are frozen once agreed. Never edit them unless explicitly instructed.
+- Deviations from the plan go in the feature's `progress.md`, not by editing the plan.
+- The progress doc is the living record of what actually happened during implementation.
+```
+
+If the file already exists, do NOT overwrite it. Only suggest additions if it's missing key rules.
+
+---
+
+## Step 7: Verify companion skills exist
+
+Check that these companion skills are available (as personal skills in `~/.claude/skills/` or via the plan-first plugin, where they appear with a `plan-first:` prefix). List any that are missing, they are needed for the full workflow:
+
+| Skill | Purpose | Required for |
+|-------|---------|-------------|
+| `discuss-feature` | Pre-PRD discussion, collects decisions | Before write-prd (optional) |
+| `write-prd` | Draft feature PRDs | Starting any new feature |
+| `discuss-plan` | Pre-plan architecture discussion that settles design decisions | After PRD approval, before write-plan |
+| `write-plan` | Draft implementation plans | After PRD approval |
+| `plan-review` | Multi-lens plan review (clarifying-questions + deep-critique + red-team) | After drafting a plan |
+| `research` | Research sub-agent for technical questions / best practices (docs-first, then reputable sources), grounded in the repo and plans | Any time a "what's the right way?" question surfaces |
+| `implement-plan` | Phase-by-phase implementation | After plan approval |
+| `write-e2e-tests` | Write & run Playwright browser tests via the bundled Playwright MCP | After/while implementing user-facing flows |
+| `full-code-review` | Parallel code review with up to 7 reviewers, incl. a testing reviewer that runs the suite (branch diff or `full` codebase health check) | After implementation; periodically with `full` |
+| `doc-audit` | Documentation vs. codebase audit | After implementation |
+| `overnight-delivery` | End-to-end PRD-to-code pipeline | Full feature delivery |
+| `tradeoff-review` | Walk through trade-offs one by one | During review gates |
+| `discuss-simply` | Break a confusing topic into small confirmed steps | Any time the user asks to simplify |
+| `supabase-security` | Research and apply Supabase security fixes | Supabase projects only |
+| `clarifying-review` | Sub-agent: clarifying-questions pass | Used by plan-review |
+| `deep-critique-review` | Sub-agent: deep-critique pass (cited findings) | Used by plan-review |
+| `red-team-review` | Sub-agent: adversarial pass that tries to break the plan | Used by plan-review |
+
+If any are missing, inform the user which skills are not installed and what workflow steps will be unavailable.
+
+---
+
+## Step 8: Present summary
+
+Tell the user what was created:
+
+```
+## Project Setup Complete
+
+### Created:
+- `.claude/CLAUDE.md`: [N] sections of project rules
+- `context/overview.md`: project overview with [tech stack, architecture, working agreements]
+- `~/.claude/CLAUDE.md`: [created / already exists, verified / declined]
+
+### Workflow ready:
+- [List available skills]
+- [List missing skills, if any]
+
+### Next steps:
+1. Review `.claude/CLAUDE.md` and `context/overview.md`: adjust anything that doesn't match your project
+2. Create your first feature PRD with `/write-prd [feature name]`
+3. The overview and CLAUDE.md will grow organically as you build, don't front-load rules
+```
+
+---
+
+## Design principles for this skill
+
+1. **Detect, don't assume.** Read the repo before generating files. The scaffolding must match the actual project.
+2. **Ask, don't guess.** If something can't be auto-detected, ask the user. Wrong scaffolding is worse than no scaffolding.
+3. **Minimal viable structure.** Create only what's needed now. Empty tables and placeholder sections are fine. They get populated during development.
+4. **Starter rules, project-specific details.** Working agreements and code quality rules are starting defaults the user adjusts; rules marked as examples apply only to their stack. Tech stack, architecture, and file organization are project-specific.
+5. **Never overwrite.** If files exist, ask before replacing. The user may have customized them.

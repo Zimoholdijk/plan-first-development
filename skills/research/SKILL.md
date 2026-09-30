@@ -1,0 +1,85 @@
+---
+name: research
+description: Spin up a research sub-agent to answer a technical question or find best practices, grounded in the repo, the plans, and the current discussion. For any named technology (a database, an ORM, a framework, a library), it reads the official documentation first, then corroborates with reputable engineering sources. Returns a cited, recommendation-first answer checked against the project's actual stack and versions. Takes the question as argument.
+disable-model-invocation: false
+argument-hint: "[the question, e.g. 'best way to paginate a large table in Postgres' or 'debounce vs throttle for this input']"
+---
+
+# Research a Question
+
+You are researching, on behalf of the current work, the question: $ARGUMENTS
+
+This skill spins up a research sub-agent to answer a technical question or find the best-practice approach to something, then critically synthesizes its findings for the user. The answer must be grounded in three things: the **official documentation** of whatever technology is involved, **reputable secondary sources** for real-world tradeoffs, and the **project's own context** (its stack, its plans, the question as it actually came up). It is for answering questions that need an authoritative, current answer, not a guess from memory.
+
+## When to use this
+
+- A genuine "what's the right way to do this?" question surfaced during `/discuss-feature`, `/write-plan`, `/plan-review`, or implementation.
+- You need to verify whether a pattern is idiomatic for a specific tool (this is the framework-idiom check those skills call for, done properly with sources).
+- You're weighing two approaches and want the tradeoffs documented from credible sources, not asserted.
+
+This skill is focused and repo-grounded: one or a few specific questions, answered against the docs and the project. Split an open-ended topic into specific questions before using it.
+
+## Rules
+
+These are non-negotiable:
+
+1. **Documentation first, always.** When the question involves any specific technology, the first pass is that technology's *official* documentation, not a search engine, not a blog, not memory. Only after the docs are exhausted do secondary sources come in. A best-practice claim that contradicts the official docs is wrong until proven otherwise.
+2. **Do not answer from memory.** Model training is stale and these questions are version-sensitive. Every substantive claim must trace to a source read during this research. If a sub-agent returns an answer with no sources, send it back.
+3. **Ground the answer in the actual project.** The recommendation must fit the project's real stack and *installed versions* (check the project's manifests and lockfiles, e.g. `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`). A pattern the project's version doesn't support is not an answer. Tie findings back to the specific plan or code under discussion.
+4. **No persona posturing in the sub-agent prompt.** Do not frame the research agent with an assumed identity ("you are a senior engineer", "act as an expert"). Persona framing shows no reliable benefit and its effects are unpredictable. State the task, the sources to use, and the quality bar directly. Judge the work by its sources, not by a role it was told to play.
+5. **Weight sources by credibility, and say so.** Official docs and maintainer writing outrank well-regarded engineering blogs, which outrank random tutorials and unattributed forum answers. Cite every source and note its tier. A lone Stack Overflow answer is a lead to verify, not a conclusion.
+6. **Surface conflicts, don't paper over them.** Where reputable sources disagree, or where best practice conflicts with the current plan, present the disagreement and let the user decide. Do not silently pick a side.
+
+## Step 1: Frame the question and gather context
+
+Before spawning anything, pin down what's actually being asked and assemble what the sub-agent needs (it has no prior knowledge of this project):
+
+1. **State the question precisely.** If the user's phrasing is broad, narrow it to the decision actually in front of you.
+2. **Split by documentation source, and cap the questions.** One researcher gets **one core objective**, phrased as **at most three numbered questions**, all answerable from the same documentation source. A question set that spans sources (e.g. "how do database migrations run on deploy, how should the notification queue retry failed sends, and how should the CI job cache dependencies" is database docs, queue-library docs, and CI docs) is three researchers, not one; each finishes in a fraction of the turns and a stall in one does not lose the others. Do not split a single-source question just to have more agents: every agent costs overhead, and fewer capable agents beat many narrow ones.
+3. **Identify the technologies and their versions.** Read the project's manifests and lockfiles, e.g. `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, to learn exactly which tools and which versions are in play. Name them explicitly; "the database" alone is not enough, note the client/library versions and which sub-features are involved (auth, storage, background jobs, etc.).
+4. **Read the project context** the answer must fit: `context/overview.md`, `.claude/CLAUDE.md`, `~/.claude/CLAUDE.md`, and the specific PRD / implementation plan / `progress.md` the question arose from.
+5. **Identify the relevant code.** Point the sub-agent at the specific files, schema, or plan section the question is about, so its answer is concrete, not generic.
+6. **Note any available documentation tools.** If an MCP server for the technology is connected (e.g. a docs-search MCP for that technology), the sub-agent should use it for the docs-first pass. Tell it which tools exist.
+
+## Step 2: Spawn the researcher agent
+
+Spawn the `researcher` sub-agent (it carries the docs-first methodology, its own turn budget, and the output format, and has web search/fetch plus read access to the repo and connected MCP doc tools). For multiple objectives (per the split rule in Step 1), spawn one `researcher` per objective in a single message so they run in parallel.
+
+You do not need to restate the methodology; the agent owns it. Give it only the **task context** from Step 1:
+
+- **The objective, as up to three numbered questions** (narrowed to the decision actually in front of you).
+- **A findings file path** the agent checkpoints into after each answered question. Put it outside the project tree, in the OS temp directory or the session scratchpad if one is provided (e.g. `/tmp/research/<slug>.md`), one path per agent. This is the safety net if the agent is cut off; it is not a deliverable and is never committed.
+- **Technologies and versions in play** (from the project's manifests and lockfiles, e.g. `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`).
+- **Project stack and architecture** (from `overview.md`).
+- **Project rules and conventions** (relevant `CLAUDE.md` excerpts).
+- **The plan or code this question is about** (the specific plan section or files, so the answer is concrete).
+- **Documentation tools available** (e.g. "the docs-search MCP for the database", or "none, use web search and fetch").
+
+The agent returns a recommendation-first, cited answer (Recommendation, Why, Tradeoffs, Fit check, Sources, Confidence and open questions).
+
+## Step 3: Assess and synthesize
+
+**Partial or missing returns come first.** If the agent's result is marked partial (it hit its turn cap), or its final message is an orientation narrative with no answer, do not discard the run: read its findings file, which holds every question it finished, then resume the same agent once with "No more tool calls. Write the complete answer, in the output format, from your findings file and what you already read; list anything unanswered under open questions." If it cannot be resumed, or the resumed message is still empty, spawn a fresh researcher with only the unanswered questions and the findings file as its starting point. If an agent never returns at all, the likely cause is a hung web fetch: re-spawn it with the instruction to use the documentation tool and `WebSearch` only. Never present a stalled run as "no answer found".
+
+The sub-agent is advisory, not authoritative. When it returns:
+
+- **Check its sources.** Did the docs-first pass actually happen, or did it lead with a blog? Are the cited URLs real and on-point? If the answer rests on weak sources or none, send it back or re-run with a sharper prompt.
+- **Re-ground it yourself** against the project's versions and rules if the sub-agent's fit check is thin.
+- **Reconcile conflicts** it surfaced. If best practice conflicts with the current plan or a project rule, that's a trade-off for the user, surface it (one at a time, per the workflow's trade-off rule); don't resolve it silently.
+
+## Step 4: Present to the user
+
+Give the user:
+
+1. The **recommendation**, grounded in their project.
+2. The **key tradeoffs** and any place where best practice conflicts with the current plan (as a decision for them, not a decision you made).
+3. The **sources**, so they can verify, leading with the official documentation.
+4. **What this means for the work in progress**: a concrete next step, an edit to the plan, a note for `progress.md`, or a flagged trade-off for `/tradeoff-review`.
+
+If the research was prompted by a plan or PRD discussion, offer to fold the conclusion into that document (as prose, per the no-code-in-plans rule) rather than leaving it only in chat.
+
+## Notes
+
+- This skill pairs with the framework-idiom checks in `/plan-review` and `/full-code-review`: when a reviewer flags "is this pattern idiomatic?", `/research` is how you answer it with sources instead of asserting.
+- Keep the question specific. "How does auth work" is a reading task; "does the installed ORM version support cursor pagination natively, and is it preferred over offset here?" is a research question this skill answers well.
+- Persona-free prompting is deliberate (Rule 4). If you adapt this skill, do not add "act as an expert" framing back in.

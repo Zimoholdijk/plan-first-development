@@ -1,0 +1,316 @@
+---
+name: write-plan
+description: Draft an implementation plan for an approved PRD following the project's established format and workflow rules. Takes a feature name or PRD path as argument. Produces a phased implementation plan for review.
+disable-model-invocation: false
+argument-hint: "[feature name or path to PRD, e.g. 'assignments' or 'context/Assignments/AssignmentsPRD.md']"
+---
+
+# Write Implementation Plan
+
+You are drafting an implementation plan for: $ARGUMENTS
+
+## Rules
+
+These rules are non-negotiable:
+
+1. **PRD must be approved first.** Do not write an implementation plan for a feature without an approved PRD. If the PRD status is "Draft", stop and tell the user.
+2. **The plan describes *how*, not *what*.** The PRD covers what and why. The plan covers architecture decisions, schema changes, file changes, and phased implementation.
+3. **No code in the plan.** Describe what to build in prose. No schema or ORM syntax, no TypeScript, no JSX, no code expressions. Implementation details like "use try/catch" or "return 500" are fine: code blocks are not. If you catch yourself writing backtick-wrapped code expressions (like `{ where: { status: "active" } }`), rewrite as prose.
+4. **Every phase must be testable, by a human and by the test suite.** Each phase ends with a "Testable" section describing (a) what a human can verify by running it (in the UI, at the command line, via curl, or in a REPL), and (b) the automated tests that ship *with that phase*, unit tests for the logic it introduces, plus integration or end-to-end tests for the flow it exposes. A phase that adds logic without adding tests for that logic is not done. If a phase isn't testable, merge it with the next one.
+5. **Testing is part of the plan, not an afterthought.** The plan must include a "Testing Strategy" section (see structure below) and every phase must name the tests it adds. Do not defer all testing to a final phase. New code is covered as it lands. If the project has no test infrastructure yet, the first phase establishes it (test runner, e2e harness, a first passing test) before feature work proceeds, and the plan says so explicitly.
+6. **Shells before detail.** For UI work, create the page or screen shell first, then the interactive parts inside it, so every phase has somewhere to render.
+7. **Document freeze.** Once approved, the plan is frozen. Deviations during implementation go in `progress.md`.
+8. **Surface all trade-offs, but research them first.** Never accept trade-offs silently. Note known limitations, performance compromises, and security implications. But before presenting a trade-off as an open choice, research it (Step 2.6): documented best practice often resolves it outright, and the user should only adjudicate genuinely open choices, each backed by evidence, never a bare "A or B?" they have to research themselves.
+9. **Facts before phases.** A plan rests on claims about the world: what the data actually looks like, how many rows there really are, what the current code does at runtime. Every such claim is verified before drafting (Step 1.5) and recorded in the plan's **Verified Facts** section with how it was checked. Never guess the shape of the data, the volume of a table, or the behavior of existing code when a query, a file read, or one question to the user would settle it. And never defer the check into the plan: a "Phase 0", "probe", or "spike" phase whose purpose is to discover something the planner could learn today is not a phase, it is unfinished planning. A discovery phase survives only when the fact cannot exist before the code does (a dependency not yet released, an environment not yet provisioned), and then the plan says why and what each outcome changes.
+10. **Structure smell-check before finalizing.** Before presenting the plan for review, re-read every phase looking for this shape: "for type A do X with separator Y1; for type B do X with separator Y2." When N branches differ only by a literal or small piece of metadata, surface "branched plan vs. single path with data difference" as an explicit Architecture Decision trade-off. A branched plan produces branched code; catching it in prose is cheaper than refactoring merged code.
+
+## Step 1: Gather context
+
+Before writing anything, read:
+
+1. The approved PRD for this feature
+2. `context/[Feature]/implementation-plan.md` if `/discuss-plan` already seeded it: a plan stub whose `## Architecture Decisions` section holds the decisions agreed there, each with its basis (a research citation, an established fact, or a product call) and reversibility. **These are settled inputs**: keep their AD numbering, preserve their citations, and build the rest of the plan around them, do not silently reopen or contradict them. If planning reveals one is wrong, flag it to the user rather than quietly overriding it.
+3. `context/overview.md`: project overview, tech stack, existing features, shared utilities
+4. `.claude/CLAUDE.md`: project rules
+5. `~/.claude/CLAUDE.md`: global rules
+6. Any existing feature docs that this feature depends on or interacts with
+7. The persisted data model, if any (database schema, migrations, model definitions, or stored file formats)
+8. Relevant existing code files that will be modified (e.g. middleware, routes, pages, and components in a web app)
+
+Understand the current state of the codebase before proposing changes. Check what already exists in shared utilities before creating new ones. If discuss-plan seeded the Architecture Decisions, the big trade-offs are largely settled; Step 2.6 then only needs to research trade-offs that surface fresh during planning, not re-litigate the agreed ones.
+
+## Step 1.5: Verify the plan's empirical premises
+
+Before drafting, list every claim the plan's correctness depends on that is a fact about the world rather than a design choice. Typical ones:
+
+- **Dependency contracts.** What each library or third-party service the plan relies on documents for the version the project uses. Check the official docs for that version (via `/research` if unclear) and the code that calls it.
+- **Data reality.** Row counts, value distributions, whether a column is ever null, whether an edge case the code assumes cannot happen (a null, a duplicate key, an invalid value) has ever actually occurred. A query answers this; a guess does not.
+- **Current runtime behavior.** What the existing code does on the path the plan changes, read from the code, not from its comments or the docs.
+- **Existence and state.** Whether production data exists, whether the feature is live, which indexes, policies, triggers, and constraints are really present.
+
+**How a fact gets verified, in order:** read the code and the schema; then, if a database MCP with a query tool is connected, run a read-only `SELECT` yourself (show the query before it runs; never a write, never a call that mutates or costs, and nothing against production beyond a read); otherwise hand the user the exact query, log lookup, or dashboard check to run, say what each outcome means for the plan, and **wait for the answer**. Only when the fact is genuinely unobtainable does the safe assumption apply (assume production data exists, assume the worst case the documentation allows), stated as an assumption, never as a fact.
+
+Record each fact in the plan's **Verified Facts** section: the claim, how it was checked (the query, the file and line, or "user confirmed"), and the result. Reviewers inherit these as project facts, so a fact you verify once is not re-litigated every round; a fact you skip becomes a round of review against a guess. If a verified fact contradicts a seeded Architecture Decision, flag it to the user before drafting around it.
+
+## Step 2: Draft the plan
+
+Use this exact structure. Every section is required, except Schema Changes when the feature persists no data.
+
+```markdown
+# [Feature Name]: Implementation Plan
+
+**Feature:** [TICKET-ID] · **Status:** Draft · **Depends on:** [TICKET-ID (done), ...]
+**Branch:** `[branch-name]`
+**PRD:** `context/[Feature]/[Feature]PRD.md`
+
+---
+
+## Context
+
+[1-2 paragraphs. Only needed when the plan replaces a previous plan, or when
+there's important context not in the PRD that affects implementation.
+Omit this section if the PRD provides sufficient context.]
+
+---
+
+## Verified Facts
+
+[Every empirical claim the plan rests on, verified per Step 1.5. One row each:
+the claim, how it was checked (the read-only query, the file:line, or "user
+confirmed" with the date), and the result. A claim that could not be verified
+is listed as an ASSUMPTION with the safe direction taken and why it could not
+be checked. Reviewers treat this table as fact; anything not in it is open.]
+
+| Claim | Checked by | Result |
+|-------|-----------|--------|
+| [e.g. no task has ever been saved without an owner] | [read-only SELECT count(*) FROM tasks WHERE owner_id IS NULL, against production] | [0 rows] |
+
+---
+
+## Architecture Decisions
+
+### AD-1: [Decision title]
+
+[Prose explanation. What's the current state? What changes? Why this approach?
+Include "Known limitation:" or "Known trade-off:" where relevant.
+Each AD should be a decision that could reasonably go a different way.]
+
+### AD-2: [Decision title]
+
+[...]
+
+[3-15 ADs typical. Number them sequentially. Each has a short descriptive title.
+Cover: data model choices, API design, auth/middleware changes, component architecture,
+state management, error handling strategy, performance considerations.]
+
+---
+
+## Schema Changes
+
+**File:** `[schema file]`
+
+[Describe new models, new fields, new indexes, new enums in prose.
+State whether the migration is breaking or non-breaking.
+If no schema changes: "None. The existing schema supports everything."]
+
+---
+
+## File Changes
+
+| File | Action | Phase |
+|------|--------|-------|
+| `path/to/file` | Create / Modify (brief description) | N |
+| ... | ... | ... |
+
+[Every file that will be created or modified, with the phase it happens in.
+End with a "No changes needed to:" line listing files that might seem related but aren't touched.
+Include test files explicitly, a feature that changes `foo.ts` and adds no `foo.test.ts`
+(or e2e spec) is incomplete and the table should show why.]
+
+---
+
+## Testing Strategy
+
+[Describe how this feature will be tested. Required, never "we'll test manually."
+Cover, in prose:
+
+- **Unit tests:** which units (helpers, validators, reducers, server utilities, pure
+  logic) get isolated tests, and the key cases each must cover (happy path, boundaries,
+  error inputs). Name the units, not just "add unit tests."
+- **Integration / API tests:** which endpoints or module boundaries get tested against a
+  real DB / real adjacent module, and which paths (auth boundaries, validation failures,
+  error responses) must be exercised.
+- **End-to-end tests:** which user-facing flows get an end-to-end test in the project's
+  harness (for browser UIs, `/write-e2e-tests` authors Playwright specs). List the flows and the states each must cover:
+  happy path, error states, and, where the project has them, empty/loading states and
+  signed-out or wrong-owner boundaries.
+- **Existing infrastructure:** what test runner, harness, fixtures, and seed/data-reset
+  approach already exist (from `.claude/CLAUDE.md` "Testing Reality"). If none exist,
+  state that Phase 1 establishes them before feature work.
+- **What is deliberately not tested**, and why (e.g. third-party redirect, real email delivery),
+  with the trade-off surfaced per rule 8.
+
+Every row of the File Changes table that adds or changes logic should map to a test
+named here.]
+
+---
+
+## Phased Implementation
+
+### Phase 1: [Phase title]
+
+**Goal:** [One sentence: what the user can do after this phase.]
+
+[Describe changes. For larger phases, use sub-steps (1a, 1b, 1c).
+Each sub-step names the file and describes what changes in prose.
+Reference Architecture Decisions by number (AD-N) when relevant.]
+
+**Testable:** [Two parts. (a) Manual: what a human can verify by running it (UI, command line, curl, REPL)
+after this phase. (b) Automated: the tests this phase adds, the unit tests for any logic
+introduced and the integration/e2e test for the flow exposed, named specifically and
+expected to pass at the end of the phase.]
+
+---
+
+### Phase 2: [Phase title]
+
+[...]
+
+---
+
+[3-7 phases typical. Each phase builds on the previous.
+Phase 1 is usually the foundation the rest builds on (data model, core module, or interface).
+Last phase is usually cleanup (removing old paths, flags, or shims).]
+
+## Verification (end-to-end)
+
+[Numbered list of end-to-end scenarios that should work after all phases.
+These are the acceptance tests. 8-15 items typical.
+Cover: happy paths, edge cases, error states, and auth boundaries where the project has users.
+Mark which scenarios are covered by an automated test (the end-to-end specs from the
+Testing Strategy) versus verified manually. Aim for the critical flows to be automated, a
+scenario that only ever gets a manual check will regress silently.]
+```
+
+Do NOT add a Review Log section to the plan. Review history is kept in a **sidecar** at
+`context/[Feature]/review-log.md` (created by `/plan-review`), never in the plan itself, so
+that reviewers reading the plan can't be primed by prior rounds. The plan ends at Verification.
+
+## Step 2.4: Phasing patterns (independent testability)
+
+Every phase must produce output that can be verified without any later phase. If Phase 1 builds a hook whose only observable effect is a page built in Phase 3, the ordering is wrong.
+
+Good phasing patterns for UI work:
+
+- **Page shell before content.** Mount the route/page first (even if empty), then fill it in. Navigation is testable immediately.
+- **Hook + display together.** A hook ships in the same phase as the smallest possible consumer that renders its output.
+- **Foundation before polish.** Happy path first; empty, loading, and error states as a later polish phase.
+- **Refactor before feature.** Extract the shared component in its own phase, verify no regression, then add the new consumer.
+
+Bad phasing (do not do this):
+
+- Phase 1 creates a hook, Phase 2 creates a component that uses it, Phase 3 creates the page that renders it. Nothing is testable until Phase 3.
+- Phase 1 migrates the DB, Phase 2 updates types, Phase 3 updates queries. The migration alone has no user-visible test.
+
+If a phase fails this check, fix it by one of: build the page shell first so the phase has somewhere to render, make the phase verifiable another way (a log, a dev-only surface, direct SQL or curl), or merge it into the phase that makes it observable. For DB/backend work, a phase is independently testable if it runs cleanly with only prior phases' migrations and the result can be verified via direct SQL or curl, no frontend required.
+
+## Step 2.5: Structure smell-check
+
+Before saving and presenting the plan, run this self-check:
+
+1. Grep your own draft prose for near-identical bullets across phases or sub-steps. Look for descriptions that share verb + object structure and differ only by a literal, key, separator, or metadata value (e.g., "for CSV export use a comma; for TSV export use a tab; for the clipboard use a newline").
+2. If you find N parallel descriptions that only differ by data, you have two structural options:
+   - **Branched:** N code paths, one per type.
+   - **Unified:** One code path that reads the differing value from a small lookup or parameter.
+3. Add this comparison as an explicit Architecture Decision with both options and a "Known trade-off:" line. Do not silently lock in the branched shape. Let the user pick during review.
+
+A branched plan produces branched code. Catching the shape in prose is far cheaper than refactoring after merge.
+
+## Step 2.6: Research the plan's trade-offs
+
+Before saving and presenting, look at every trade-off the plan raises: each Architecture Decision carrying a "Known trade-off:" or "Known limitation:" line, and the branched-vs-unified question from the smell-check. Don't hand the user a list of bare "A vs B" choices, research them first.
+
+For each trade-off with a **technical or best-practice dimension** (framework behavior, idiom, security, performance, data modeling, API design), run `/research` grounded in the project's stack and versions. Research several in parallel. Then:
+
+- **Settled by evidence** → documented best practice clearly favors one option, or the downside is negligible at this project's scale. Bake the recommended choice into the AD and cite the source in the AD prose. It's now a resolved decision, not an open trade-off; flag it in the Step 4 presentation as "resolved per [source]" so the user can still object.
+- **Genuinely contested** → keep it as an open trade-off in the AD, and carry the researched points (what the docs say, the cost of each side, your recommendation) into the Step 4 presentation.
+
+Pure product/UX-preference trade-offs with no documented answer don't need research; leave them as open ADs for the user.
+
+This keeps the plan's open trade-offs down to the ones that actually need the user, each backed by evidence.
+
+## Step 3: File placement
+
+Save the plan to: `context/[Feature]/implementation-plan.md`
+
+The feature directory should already exist (created during PRD writing). If not, create it.
+
+## Step 4: Present for review
+
+After writing the plan, present it to the user with:
+
+1. A count of architecture decisions and phases
+2. Trade-offs, split into two groups: (a) **resolved by research** — list each with the option taken and its citation, as FYI the user can object to; (b) **needs your input** — the genuinely contested ones, each presented with its researched points and your recommendation
+3. Note any deviations from the PRD (there shouldn't be any, but flag if the implementation reveals issues)
+4. Summarize the Testing Strategy: what gets unit-tested, what gets an e2e test, and anything deliberately left untested (with the reason)
+5. Suggest running `/plan-review` for the multi-stage review workflow
+
+Do NOT proceed to implementation until the user explicitly approves the plan (after reviews). Approval means explicit language like "approved", "looks good, move on", or "start implementing". Silence, "ok", or "thanks" is not approval; if the signal is ambiguous, ask whether they're ready to move on.
+
+## Plan conventions
+
+### Header format
+- Feature ticket + Status + Depends on (first line)
+- Branch name (second line)
+- PRD path (third line)
+
+### Architecture Decisions
+- Numbered AD-1 through AD-N with descriptive titles
+- Prose format: current state → change → why
+- "Known limitation:" or "Known trade-off:" inline when relevant
+- Reference other ADs by number when they interact
+
+### Schema Changes
+- Name the schema file
+- Describe changes in prose (new models, fields, indexes)
+- State whether migration is breaking or non-breaking
+- "None" with explanation if no schema changes needed
+
+### File Changes table
+- Three columns: File | Action | Phase
+- Action column: "Create" or "Modify (brief description)"
+- Sorted by phase number
+- End with "No changes needed to:" line
+
+### Phased Implementation
+- Each phase has: title, Goal (one sentence), Changes (prose, optionally with sub-steps), Testable
+- Sub-steps use format: "### 1a. [Title] (`file/path`)"
+- Reference ADs by number: "per AD-3" or "(AD-7)"
+- Testable section is imperative: "Actor does X → Y happens"
+- Larger plans use sub-steps within phases; smaller plans use paragraphs
+
+### Verification
+- Numbered list, usually 8-15 items (fewer for small changes)
+- End-to-end scenarios, not unit tests
+- Cover: happy path, error states, edge cases, and auth boundaries where the project has users
+- Format: "N. Action → expected result"
+
+### Review Log (sidecar, not in the plan)
+- Lives in `context/[Feature]/review-log.md`, written by `/plan-review`, never appended to the plan
+- Structured by review round, each round clearly numbered
+- Clarifying questions: count + key changes applied + questions noted but not applied
+- Deep-critique review: verdict + critical issues (applied) + suggestions (applied or noted)
+- Red-team review: unaddressed-critical-failure-mode Yes/No + scenarios fixed or dismissed
+- Quality check: conformance changes
+- Kept separate so reviewers reading the plan can't be primed by prior rounds
+
+### Things to avoid
+- No code blocks, schema or ORM syntax, or source code in the plan
+- No implementation details that belong in the code (exact prop shapes, CSS classes, etc.)
+- No Review Log inside the plan (it's a sidecar)
+- No phases that can't be independently verified (browser, curl, SQL, or a test)
+- No "Phase 0" / probe / spike phase to learn a fact the planner could verify now (Step 1.5); discovery belongs in Verified Facts, not in a phase
+- No claim about the data, its volume, or current behavior that is not in Verified Facts
+- No phase that adds logic without naming the tests it adds for that logic
+- No plan without a Testing Strategy section
+- No file changes without a phase assignment

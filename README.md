@@ -1,0 +1,126 @@
+# plan-first
+
+A Claude Code plugin packaging a PRD-first development workflow: write PRDs, settle architecture in a plain-language design discussion before any plan is phased, draft phased implementation plans, run multi-lens plan reviews (clarifying-questions, deep-critique, and adversarial red-team passes), implement plans phase-by-phase with progress tracking, run parallel code reviews, collect tradeoff decisions, and audit documentation against the codebase. Testing is treated as a first-class part of the workflow: plans must carry a testing strategy, every phase ships its own tests, a dedicated review agent runs the suite, and a bundled Playwright MCP drives real-browser end-to-end tests.
+
+## What's included
+
+### Skills
+
+| Skill | Purpose |
+|-------|---------|
+| `project-setup` | Bootstrap a new project with context docs, CLAUDE.md, and workflow conventions |
+| `discuss-feature` | Pre-PRD discussion in plain language: one topic per message, collects decisions, creates a backlog ticket, hands off to `write-prd` |
+| `write-prd` | Draft a PRD for a new feature |
+| `discuss-plan` | Pre-plan architecture discussion in plain language: settles the design decisions (one-way doors first) grounded in the PRD and the actual code, researches technical trade-offs before surfacing them, asks you to run a read-only query or check production where a decision needs facts, adapts to a tutor mode (plain-analogy-first, one concept per message, then the jargon) when the user signals confusion, writes the decisions straight into the plan file's Architecture Decisions section (no separate design doc), and hands off to `write-plan`. Also the mid-review escape hatch: when `plan-review` rounds keep churning on one area (or its round-3 checkpoint fires), the same discussion runs against the existing plan and folds simplification decisions into its ADs |
+| `write-plan` | Draft a phased implementation plan from an approved PRD, building around the Architecture Decisions `discuss-plan` seeded into the plan file (if present). Verifies the plan's empirical premises first (what the data actually contains, what the code does today, what production looks like) by reading code, running read-only queries through a connected database MCP, or handing the user the exact query, and records them in a Verified Facts table; a Phase 0 / probe phase to learn something obtainable now is banned |
+| `plan-review` | Multi-lens plan review that loops to convergence, bounded at 5 rounds: it first establishes the plan's load-bearing premises (is it live, prod data, real infra) so rounds aren't spent on false premises, then cold reviewers (clarifying-questions, deep-critique, red-team) find issues, each finding is mechanically quote-checked (fabricated citations dropped), a cold grader rates each by reversibility/blast-radius (One-way / Significant / Medium / Minor, where only an irreversible *decision* is One-way, a serious bug with a reversible fix is graded by blast radius not by touching auth) or discards it as Not-an-issue with refuting evidence, the orchestrator fixes everything surgically, and a cold assessor (every round) tracks the dry signal, defers reversible items to test obligations, banks areas that held through a cold pass, and decides converge / another-round / **escalate** (a structurally unstable area or the round cap stops the loop and goes to the user instead of looping forever). In interactive runs a loop still open after round 3 pauses for a plain-language design checkpoint — recurring churn usually means an over-complicated design, and one simplification conversation beats two more point-fix rounds. Fixes that would add machinery to the plan are user-owned trade-offs regardless of tier (review-added machinery is the documented endless-loop fuel), and premises include how production is actually operated. A finding that turns on an unverified fact about live data or an external system is graded Needs-evidence, resolved by a query or a question to the user, and only then graded; a query that would dissolve a choice is always option zero before the user is asked |
+| `clarifying-review` | Spawn the clarifying-reviewer sub-agent for the clarifying-questions pass |
+| `deep-critique-review` | Spawn the deep-critique-reviewer sub-agent for the deep-critique pass |
+| `red-team-review` | Spawn the red-team-reviewer sub-agent to adversarially stress-test a plan or design |
+| `research` | Spin up a research sub-agent to answer a technical question or find best practices, docs-first then reputable sources, grounded in the repo, plans, and current discussion |
+| `implement-plan` | Execute an approved plan phase-by-phase, writing tests as each phase lands and keeping progress docs in sync |
+| `write-e2e-tests` | Drive a real browser via the bundled Playwright MCP to verify flows, then write durable Playwright spec files and run them |
+| `full-code-review` | Up to 7 parallel review agents (security, backend, frontend, architecture, docs, regressions, testing) in branch-diff or full codebase-health scope. The roster is selected mechanically from the diff's own signals (file types, deleted lines, risk greps), never from how the change was described — a small frontend-only diff gets a reduced roster, and any ambiguity or size signal forces every reviewer (`depth:full` does too), except that the frontend reviewer runs only when the diff contains UI code. Findings then pass a two-layer filter before they reach the user: a mechanical quote check (every finding must cite the offending line verbatim; fabricated citations are dropped) and a per-finding validation pass (a fresh second-opinion agent re-verifies each Critical/High finding). Duplicates across reviewers are merged and marked corroborated, pre-existing issues are bucketed separately, and everything discarded is shown with the reason. The testing reviewer checks new code has tests and runs the suite |
+| `tradeoff-review` | Walk through accumulated tradeoffs one by one, collecting decisions |
+| `discuss-simply` | Step back and break the current topic into small steps when the user says "explain this" or "simplify": the first message is the first idea itself, no preamble and no list of what is coming, and always shorter than the text that confused them; one idea per message (cap 100), confirmation gate after each, then a sub-80-word close and the decision, recommendation first. Works on any trade-off, finding, or concept, anywhere in the workflow |
+| `doc-audit` | Audit project docs against the actual codebase |
+| `overnight-delivery` | End-to-end pipeline: plan, plan-review to convergence, tradeoff gate, implement, 2 code review rounds |
+| `supabase-security` | Research and apply Supabase security fixes (RLS, SECURITY DEFINER, storage). Supabase projects only; works from migration files, and uses the Supabase MCP for live checks when it is connected |
+
+### Agents
+
+All defined roles live in `agents/`, so skills spawn named sub-agents (consistent prompt, explicit model, restricted tools) rather than ad-hoc inline ones.
+
+Every agent carries a hard `maxTurns` and a shared budget rule: a turn is one message, not one tool call, so independent reads are batched; reading stops at a numeric reserve a few turns before the cap (five for the 20 to 30 turn agents, three for the 10 to 12 turn ones) and the remaining turns go to writing; and the complete result ships in a single final message, because nothing said before it reaches the caller. The spawning skills handle the other side: a run that comes back partial is resumed once with "no more reads, write what you have", then re-spawned once, and only then reported as not delivered, never silently dropped.
+
+**Plan-review** (red-team-reviewer on Opus; clarifying-reviewer, deep-critique-reviewer, grader, and assessor on Sonnet):
+
+| Agent | Purpose |
+|-------|---------|
+| `clarifying-reviewer` | Clarifying-questions pass: surfaces ambiguity, gaps, and missing tests |
+| `deep-critique-reviewer` | Deep-critique pass: grades fit, scope, operational failure modes, and test coverage, with cited findings |
+| `red-team-reviewer` | Adversarial pass: tries to break the plan and returns ranked, cited failure scenarios |
+| `grader` | Rates each finding by reversibility and blast radius into One-way / Significant / Medium / Minor, or discards it as Not-an-issue with cited refuting evidence (the false-positive filter), and tags it with an area. Decision-vs-defect gate: only an irreversible *decision* is One-way; a serious bug with a reversible fix (redeploy, tighten a policy) is Significant, not One-way, even in auth code — and a small-consequence defect (stale text, a missing checklist line) defaults to Medium even in an auth flow; the defect's own blast radius is graded, never the area's stakes. Choosing between defensible approaches is a decision, not a defect. Cold to the cost of fixing |
+| `assessor` | Runs every round, holds the full review log, tracks the dry signal (new unique gated findings per round), defers reversible items to test obligations, banks areas fixed-and-held through a cold pass (One-way counts persist across banking), and makes the converge / another-round / **escalate** call (only One-way/Significant gate; a second One-way in an area, a **third Significant** in an area, or the round-5 cap escalates to the user rather than looping). Also counts self-inflicted findings — those against machinery added by earlier rounds — since a rising share means the loop is reviewing its own fixes and the exit is deletion |
+
+**Code-review**, the seven lenses `full-code-review` selects from and runs in parallel (security, architecture, and regression on Opus; backend, frontend, documentation, and testing on Sonnet). All seven grade on one shared, impact-anchored severity rubric and must quote the offending line verbatim:
+
+| Agent | Purpose |
+|-------|---------|
+| `security-reviewer` | OWASP Top 10, auth, secrets, injection, SSRF, upload safety |
+| `backend-reviewer` | API/query/error-handling correctness, performance, framework-idiom check |
+| `frontend-reviewer` | component architecture, accessibility, responsive/UX, type safety |
+| `architecture-reviewer` | design quality, plan conformance, DRY/repetition smell, scope, layer placement |
+| `documentation-reviewer` | whether the docs reflect the change (or current code, in full scope) |
+| `regression-reviewer` | the `-` lines: behavior, guards, or conventions deleted with no replacement |
+| `testing-reviewer` | test coverage of the change, and actually runs the suite |
+| `finding-validator` (Sonnet) | fresh second opinion on each Critical/High finding before it reaches the user: real? introduced by this diff? handled elsewhere? |
+
+**Other:**
+
+| Agent | Purpose |
+|-------|---------|
+| `researcher` (Opus) | Docs-first, cited, recommendation-first answer to one objective (at most three questions from one documentation source), grounded in the project's stack and versions. Budgets in tool calls, checkpoints each answered question to a findings file outside the repo so a turn-cap stop still returns the finished work. Used by `research` |
+| `doc-auditor` (Opus) | Audits docs against the code, change-scoped or full. Used by `doc-audit` |
+
+### Bundled MCP servers
+
+| Server | Purpose |
+|--------|---------|
+| `playwright` | Microsoft's Playwright MCP (`npx @playwright/mcp@latest`), exposes `mcp__playwright__*` browser tools. `write-e2e-tests` uses it to drive a real browser and verify flows before writing spec files. Starts automatically when the plugin is enabled. |
+
+The server runs a real browser via `npx`, so Node.js must be available. It defaults to **headed** mode with **system Chrome**, ideal on a desktop where you want to watch tests run. For a **headless remote/CI session** (no display, no system Chrome), add `--headless --browser chromium` to the server's `args` in `.mcp.json` (and `--no-sandbox` in some containers); `--browser chromium` makes it use the bundled Chromium under `PLAYWRIGHT_BROWSERS_PATH` instead of hunting for system Chrome. No `playwright install` is needed where the bundled Chromium is already present. This applies to the MCP only; durable specs run under the project's own `@playwright/test`.
+
+## Installation
+
+From a local checkout:
+
+```
+/plugin marketplace add /path/to/plan-first-development
+/plugin install plan-first@plan-first-marketplace
+```
+
+Or from GitHub:
+
+```
+/plugin marketplace add Zimoholdijk/plan-first-development
+/plugin install plan-first@plan-first-marketplace
+```
+
+To pull updates later: `/plugin marketplace update` then `/reload-plugins`.
+
+## Personalize after installing
+
+This plugin ships generic on purpose: no personal workspace IDs, board IDs, or tracker choices are baked in, so it stays portable and safe to share or reuse across projects. Personalization lives in two config layers the skills read at runtime, not in the plugin itself. After installing, set them up:
+
+1. **Pick a default issue tracker (once, global).** `discuss-feature` creates tickets, and `write-prd` fetches one when given a ticket ID. Add a line to your `~/.claude/CLAUDE.md` naming your default tracker, for example: "Default issue tracker is GitHub Issues; use it for backlog tickets unless a project overrides it." Project config always overrides this. Do not put a specific board or data source ID here; that is per-project.
+
+2. **Capture each project's board (per repo).** Run `/plan-first:project-setup` in a repo. It asks which tracker and the exact target (GitHub repo, Linear team/project, Notion data source ID) and writes it to an "Issue Tracker" section of that project's `.claude/CLAUDE.md`. `discuss-feature` reads that section and creates tickets without re-asking. If a project has no board, leave it out; discuss-feature then asks once whether to file a ticket and where (suggesting the default tracker from `~/.claude/CLAUDE.md`, if one is named); if the user says no, it just delivers the decision summary.
+
+3. **Tune the global rules the skills inherit.** Every skill reads `~/.claude/CLAUDE.md`. Conventions you keep there (approval semantics, no-hardcoded-config, primary viewport, writing style) are obeyed by the whole workflow. This is where your cross-project standards and voice live.
+
+**Project layout.** `/plan-first:project-setup` creates the files every skill reads: `.claude/CLAUDE.md` for project rules, `context/overview.md` for the project overview, and one `context/<Feature>/` folder per feature holding its PRD, `implementation-plan.md`, the `review-log.md` sidecar, and `progress.md`.
+
+Creating tickets also requires the relevant MCP server connected in your environment (e.g. the GitHub, Linear, or Notion MCP). Without it, discuss-feature still runs the discussion and hands off; it just skips the ticket step.
+
+Why this split: project-specific values differ per repo and should not leak into a shared plugin, so they live in each project's config; cross-project preferences live in your global `~/.claude/CLAUDE.md`. The plugin stays portable, and "you" lives in the layers it reads.
+
+## Design principles baked in
+
+- Hard separation of what (PRD) from how (plan). No code in PRDs; no code blocks in plans.
+- Independent testability: every phase must be verifiable without later phases (page shell before content, hook + display together, foundation before polish).
+- Branch-vs-data smell: N near-identical branches differing only by a literal should usually be one path with the difference as data.
+- Framework-idiom checks: reviewers verify SQL/ORM/hook patterns against official framework docs, not blogs. A pattern with no documented analog is a red flag.
+- Behavior-deletion checks: a dedicated regression reviewer grades what a diff removes, and the deep-critique plan reviewer grades what a rewrite implicitly drops.
+- Reviewers organized by lens, not seniority role-play: a clarifying-questions pass, a deep-critique pass (cited findings; a Pass is blocked until implicit-deletions, test coverage, and operational failure modes are explicitly cleared), and an adversarial red-team pass that tries to break the plan. Persona framing like "you are a senior engineer" is deliberately avoided: the evidence shows it delivers no reliable benefit and its effects are unpredictable, so the prompts state the task and quality bar directly instead.
+- Testing is non-optional: plans carry a testing strategy and every phase names the tests it adds; tests are written as each phase lands, not batched to the end; a dedicated review agent runs the suite; critical flows get automated end-to-end coverage (Playwright for browser UIs) rather than manual-only checks.
+- Strict approval gates: silence, "ok", or "thanks" is not approval.
+- Reviews are re-runnable on request, without pushback.
+- Cold-start reviews: every reviewer, every round, sees only the current plan and project context, never the prior reviewers' questions, the trade-off decisions, or any review history. The Review Log lives in a **sidecar file** (`review-log.md`), never in the plan, and the reviewer agents are told never to open it, so a reviewer can't prime itself on prior rounds even though it has file access. Priming a reviewer with "this was already addressed" anchors it to rubber-stamp those parts; a cold reviewer re-scrutinizes them, so round 4 reviews as hard as round 1.
+- Trade-offs are researched before they reach you: across write-plan, plan-review, implement-plan, and tradeoff-review, the workflow runs `/research` on any trade-off with a technical or best-practice dimension. The ones documented best practice settles are resolved with a citation (shown as FYI you can object to); only genuinely contested choices are surfaced for your decision, each pre-loaded with the evidence and a recommendation, never a bare "A or B?".
+
+## Notes
+
+- When installed as a plugin, skills are namespaced: `/plan-first:write-prd` instead of `/write-prd`. Skill bodies reference each other by their short names (e.g. "Run /plan-review"); Claude resolves these to the namespaced versions.
+- Some skills read `~/.claude/CLAUDE.md` for global rules. If that file doesn't exist in the environment (e.g. a fresh cloud session), the skills proceed without it.
+- The typical flow: `project-setup` once per repo, then per feature: `discuss-feature` → `write-prd` → `discuss-plan` → `write-plan` → `plan-review` → `tradeoff-review` → `implement-plan` (tests ship with each phase, `write-e2e-tests` for browser flows) → `full-code-review` → `doc-audit`. `discuss-plan` is an interactive design gate that settles architecture before phasing, so `plan-review` has less to raise — and it comes back mid-review as the simplification conversation when rounds churn; it sits outside the unattended `overnight-delivery`, which chains the rest end-to-end from an approved PRD.

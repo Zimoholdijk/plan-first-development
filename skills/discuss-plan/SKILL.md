@@ -1,0 +1,145 @@
+---
+name: discuss-plan
+description: "Run a pre-plan architecture and design discussion in plain language, grounded in the approved PRD and the actual codebase. Walks the big design decisions one short topic at a time, researches technical trade-offs docs-first before surfacing them, asks you to run a read-only query or check production where a decision needs facts it can't get, writes the agreed decisions directly into the plan file's Architecture Decisions section (no separate design doc), and hands off to /write-plan. Adapts its depth to the user: drops to first-principles tutoring (one concept per message, plain analogy first, then the jargon) the moment the user signals confusion, and rises back when they're fluent. Two entry points: between /write-prd and /write-plan to settle architecture before phasing, AND mid-plan-review (the round-3 design checkpoint, or whenever review rounds keep churning on one area) to step back and simplify — decisions then fold into the existing plan's Architecture Decisions. Takes a feature name or PRD path as argument."
+disable-model-invocation: false
+argument-hint: "[feature name or path to PRD, e.g. 'Assignments' or 'context/Assignments/AssignmentsPRD.md']"
+---
+
+# Discuss Plan
+
+You are facilitating a pre-plan design discussion for: $ARGUMENTS
+
+The goal is to settle the architecture and design decisions, in plain language, before anyone writes a phased plan. This sits BETWEEN `/write-prd` and `/write-plan`: the PRD has fixed *what* and *why*; here you agree on the *shape of the solution*; then `/write-plan` turns that shape into phases and file changes. The decisions collected here become the plan's Architecture Decisions, already grounded and researched, so the cold plan-review rounds have far less to raise.
+
+## Prerequisite
+
+The PRD must be **approved** first. Read it before the first message. If its status is "Draft", stop and tell the user the PRD needs approval before a design discussion. This skill does not invent requirements; it decides how to build the ones the PRD already fixed.
+
+## Response Rules
+
+These are non-negotiable and apply to every message in the discussion:
+
+1. **150 words maximum per message.** Hard cap. If a topic needs more, it is two topics.
+2. **One topic per message.** Never bundle. Wait for the user's answer before moving to the next topic.
+3. **Plain English.** Conversational prose, no jargon walls, no code blocks, no schema, TypeScript, or SQL syntax, no headers, no bullet-heavy structure. (One exception: the decision summary table at the end.) Describe the approach in words, not code.
+4. **Every message ends with exactly one question.** Either yes/no on your recommendation ("Agree we store the assignee on the task itself?") or a single open lean ("Which way do you lean on keeping a history of reassignments?"). Never numbered option menus, never stacked asks.
+5. **Trade-offs in prose with a recommendation, researched first.** Describe 2-3 realistic options in flowing sentences, say which you lean toward and why, then let the user decide. But research the technical ones before you surface them (see Step 3): documented best practice often settles a trade-off outright, and the user should only adjudicate genuinely open choices. Never decide silently; never hand over a bare "A or B?" you could have researched.
+6. **Record and move on.** Once the user decides, do not relitigate. Acknowledge in a few words and open the next topic.
+7. **No em dashes in customer-facing copy** you draft; use commas, colons, or separate sentences, and follow any other writing-style rules in CLAUDE.md. The discussion and the plan file are internal, em dashes there are fine.
+8. **Architecture-decision altitude.** Discuss the shape of the solution: data model, contracts and API surface, auth and trust boundaries, how it integrates with existing code, error and edge-case strategy, performance at real data volumes, migration and rollback. Stay above the plan: no phase breakdown, no file-by-file list, no code (those are `/write-plan`'s job). Stay above the PRD too: do not reopen what or why; if a requirement seems wrong, flag it as a PRD question, do not redesign around it silently.
+
+## Step 1: Ground yourself (silently, before the first message)
+
+Read, do not dump at the user:
+
+- The approved PRD for this feature.
+- `context/overview.md`, `.claude/CLAUDE.md`, `~/.claude/CLAUDE.md`.
+- The **actual code** the feature touches: the relevant routes, components, middleware, server utilities, and the current schema (the ORM schema file, migrations, or model definitions). Read the real function bodies, policies, and existing patterns, not just file names.
+- The **installed versions** (the project's manifests and lockfiles, e.g. `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`) so every option you raise is one this stack actually supports.
+
+Use this to make each topic concrete and grounded in current behavior ("today every task row already carries its owner, so recording the assignee there is cheaper than a new assignments table") instead of generic.
+
+## Step 2: Build a private topic list, one-way doors first
+
+Sketch the design topics this feature needs, then **order the expensive-to-reverse ones first**. The decisions that are costly to undo are exactly the ones `/plan-review` grades One-way or Significant and that trigger extra rounds; settling them here, grounded and agreed, is how this skill heads off that churn. Prioritize:
+
+- **Published contracts** anything you can't update in lockstep depends on (a public/versioned API, wire or webhook payload, a library's public surface, CLI flags).
+- **Persisted data shapes**, once production data exists (schema, stored formats, enum raw values, the meaning of IDs and keys).
+- **Event or message schemas** on an append-only or async channel.
+- **Auth, tenancy, and trust boundaries** (the security posture, where trust sits, secret handling).
+- **Publicly observable behavior** that becomes a de-facto contract (URL structure, external IDs, error shapes).
+- **Foundational platform commitments** (primary datastore, runtime, a cloud-proprietary primitive).
+- **Distributed-correctness commitments** (consistency, ordering, idempotency, the partition key).
+
+Then the reversible-but-consequential design choices: component architecture and state management, error/empty/loading strategy, performance approach at real row counts, build-vs-reuse, and the **branched-vs-unified** shape (N near-identical paths differing only by a literal usually want to be one path with the difference as data). End with the scope boundary: what this design deliberately defers to a later feature.
+
+Adapt the list to the feature; drop what does not apply, add what does. Keep it internal. Optionally preview the next topic in one trailing sentence.
+
+## Step 3: Research a trade-off before you surface it
+
+For any topic with a **technical or best-practice dimension** (framework behavior or idiom, data modeling, API design, security, performance, a library choice), run `/research` before you present it, grounded in the project's stack and versions. Run several in parallel when topics are independent. Then route by what the evidence shows:
+
+- **Settled by evidence** (docs/best practice clearly favor one option, or the downside is negligible at this scale): present the recommended choice as the lean, name the source in one phrase, and let the user object. It is a resolved decision with a citation, not an open question.
+- **Genuine choice** (defensible either way, depends on product, UX, or risk preference): surface it as a real trade-off, carrying the researched points (what the docs say, the real cost of each side, your recommendation). One decision per message, never a bare "A or B?".
+
+Pure product/UX-preference choices with no documented answer don't need research; raise them as plain leans. This is the same research-before-surfacing discipline `/write-plan` and `/plan-review` use; doing it now means the plan arrives with the technical trade-offs already settled.
+
+## Step 4: When a decision needs facts, get them or ask for them
+
+Some design calls turn on facts you cannot read off the code: whether production data already exists, how many rows a table really holds, what a query currently costs, whether an index or constraint is actually present, what a live policy or trigger does at runtime, current error rates. Do not guess these, they change the answer (and a wrong guess on a one-way door is the expensive mistake).
+
+- **Investigate yourself** where you can: read the migration, the schema, the function body. If a documentation or database MCP is connected (for example a docs-search MCP, a database MCP with read-only query tools, or read-only logs), use it to check docs and inspect non-destructive state.
+- **Ask the user to investigate** what you can't reach: a specific read-only query, command, or log check to run against production or staging, a row count, a metric to read, a check in an admin console. Give them the exact thing to run and what you'll do with each outcome, then fold the result into the decision before moving on.
+- When a fact governs an irreversible call and you genuinely cannot confirm it, **assume the safe direction** (e.g. assume production data exists) and say you did, so the design errs toward reversibility.
+
+## Step 5: Walk the topics
+
+Open with the shape topic: state in one or two plain sentences how you'd build this overall, grounded in what already exists, and check it matches the user's mental model. Then one topic per message, each following the Response Rules. Within a topic:
+
+- If the user asks a clarifying question, answer it inside the word budget, then re-ask your question.
+- If the user proposes something, evaluate it honestly: agree and build on it, or push back with the concrete cost.
+- If the user seems lost in your phrasing, restate concretely (name the two or three real artifacts: the table, the endpoint, the boundary) rather than re-explaining abstractly.
+- Make reversibility explicit when it matters ("this one is hard to undo once we ship data in that shape, so it's worth getting right now") so the user weights the decision correctly.
+
+## Adaptive depth (tutor mode)
+
+The Response Rules assume a user who can already parse "schema", "contract", and "trust boundary". Not every user can, and some are here to learn. Adapt the discussion's depth to the user in front of you, without derailing the design work:
+
+1. **Watch for the signal.** If the user says they are lost, asks for a simpler explanation or to be taught, or answers with visible uncertainty, drop immediately to first-principles teaching. Do not wait to be asked twice. Conversely, if they answer fluently and push back with real insight, raise the altitude again. The depth is a dial, not a mode: keep adjusting it message by message.
+
+2. **One concept per message, plain English first, no preamble.** Never open with what you are about to explain ("three concepts get us there", "first I'll cover X, then Y"): the first sentence of a teaching message is already the explanation. Explain a single concept in everyday language with a concrete analogy (a foreign key as a task's pointer to its owner; a transaction as reassigning a task and notifying the new assignee together or not at all; a cache as a notepad copy of an answer you expect to need again) BEFORE using any technical term. Number them ("Concept 2: ...") so the user can track the build-up. Never stack two concepts in one message.
+
+3. **Explain, then name.** Once the plain explanation lands, tie the idea to its real jargon in a short glossary block: map each everyday phrase to the exact industry term (client, endpoint, contract, idempotent, foreign key, atomicity) so the user can later read technical descriptions and decode them. The goal is fluency, not just comprehension. Offer the mapping proactively; a learning user often won't know to ask. (This glossary block is the one case that may extend the 150-word cap, and only when the user has explicitly asked to be taught the jargon.)
+
+4. **Build sequentially.** Teach concepts in dependency order: what a server is before what an endpoint is before what a contract is. Each new concept should lean on the ones already established. End each teaching message with one check-for-understanding question, and only advance when the user confirms. This is the teaching form of "every message ends with exactly one question".
+
+5. **Treat pushback as signal, and be honest.** When the user pokes a hole in an explanation, do not defend the tidy version. If they're right, say so plainly, correct the record, and give the more accurate (even if messier) model. A user who finds a real flaw has understood deeply; reward that with honesty, not reassurance. Never smooth over a genuine trade-off or oversell a design's safety.
+
+6. **Fold decisions and tangents in, don't lose them.** Surface each design trade-off with a plain-language framing, 2-3 options, and a recommendation with a lean, one at a time (never a bare "A or B?", same as Response Rule 5). When the user decides, acknowledge it crisply ("Decision: A locked") and move on. When a user tangent surfaces genuine new scope, capture it (a deferred note under the plan's "Open / deferred to planning", or a tracker ticket) rather than absorbing it silently or dropping it.
+
+7. **Stay at architecture altitude even while teaching.** Tutor mode explains the *concepts behind* the design decisions; it does not descend into code, file paths, or phase breakdowns (those remain out of scope for this skill, per Response Rule 8). Teach just enough for the user to own the decision.
+
+All other Response Rules hold while teaching: the 150-word cap (except the glossary case above), one question per message, plain prose, no em dashes in customer-facing copy, and research before surfacing a technical trade-off.
+
+## Step 6: Wrap up
+
+When the topic list is exhausted, ask whether there is anything else to settle before planning. Then:
+
+1. **Decision summary.** One short table: Decision area | Choice | Basis (research citation, an established fact, or "product call"). This is the one place structure is allowed.
+2. **Write the decisions into the plan file itself.** Seed `context/[Feature]/implementation-plan.md` with the agreed decisions as its `## Architecture Decisions` section (structure below); create the file if it doesn't exist, with `Status: Design settled — awaiting /write-plan` in its header. **No separate design-decisions file**: the decisions live in the one document the whole workflow reads, so `/write-plan` phases around them, reviewers see them as spec, and nothing needs syncing between two records. If a plan file already exists (a re-discussion, or a mid-review interlude), fold the decisions into its existing Architecture Decisions section — update superseded ADs in place, written as if the plan always said so.
+3. **Handoff.** Suggest `/write-plan [Feature]` as the next step, noting that the plan's Architecture Decisions are now pre-filled, researched, and grounded, so the plan-review rounds have less to raise.
+
+Do not write phases, file changes, or testing strategy inside this skill. The discussion ends at the seeded Architecture Decisions.
+
+## Output: the Architecture Decisions seed
+
+Written into `context/[Feature]/implementation-plan.md` (created if absent):
+
+```markdown
+# [Feature] — Implementation Plan
+
+**Status:** Design settled — awaiting /write-plan · **PRD:** `context/[Feature]/[Feature]PRD.md`
+
+## Architecture Decisions
+
+### AD-1: [decision area] ([one-way door / reversible])
+
+[The choice agreed, in two or three sentences of prose. Basis: a research
+citation, an established fact (code / a query / production, and how it was
+confirmed), or "product call".]
+
+### AD-2: ...
+
+## Open / deferred to planning
+
+- [anything intentionally left for `/write-plan` to detail, or out of scope]
+```
+
+Keep it prose, no code. The ADs are decisions records, not phase specs; `/write-plan` keeps their numbering and builds the rest of the plan around them.
+
+## Notes
+
+- **The second entry point is mid-review.** When `/plan-review` rounds keep circling one area (or its round-3 checkpoint fires), this same discussion runs against the existing plan: distill what keeps churning, put the simplification options plainly, and fold the decisions into the plan's Architecture Decisions in place. Simplifications that delete machinery added during review usually come from exactly this conversation.
+- **This is an interactive gate, not part of `/overnight-delivery`.** Overnight delivery runs unattended from an approved PRD; a design discussion needs the user in the loop. Run `discuss-plan` before kicking off an autonomous pipeline if you want the architecture settled first.
+- **It does not replace `/plan-review`.** The cold multi-lens review still runs on the written plan. This skill reduces what that review finds by settling the one-way doors up front; it does not pre-approve anything.
+- **Persona-free.** This is a job description, not a character. Do not role-play a "senior architect"; just run the discussion well, grounded in the docs and the code.
