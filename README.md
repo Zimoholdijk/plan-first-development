@@ -73,21 +73,20 @@ The server runs a real browser via `npx`, so Node.js must be available. It defau
 
 ## Installation
 
-From a local checkout:
+plan-first is listed in the [Zimoholdijk plugin catalog](https://github.com/Zimoholdijk/plugins):
 
 ```
-/plugin marketplace add /path/to/plan-first-development
-/plugin install plan-first@plan-first-marketplace
+/plugin marketplace add Zimoholdijk/plugins
+/plugin install plan-first@zimoholdijk
 ```
 
-Or from GitHub:
+To pull updates later: `/plugin marketplace update zimoholdijk` then `/reload-plugins`.
+
+To work on the plugin itself, load it straight from a local checkout instead, so edits show after `/reload-plugins`:
 
 ```
-/plugin marketplace add Zimoholdijk/plan-first-development
-/plugin install plan-first@plan-first-marketplace
+claude --plugin-dir /path/to/plan-first-development
 ```
-
-To pull updates later: `/plugin marketplace update` then `/reload-plugins`.
 
 ## Personalize after installing
 
