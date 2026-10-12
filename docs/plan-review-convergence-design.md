@@ -171,12 +171,14 @@ Only **One-way and Significant** findings gate convergence. Medium and Minor do 
   same area, or one that will not stay settled across two rounds, **escalates**: the
   assessor returns `Escalate` and the loop stops for a user architecture decision, rather
   than point-fixing symptoms forever. A
-  One-way fixed once and then clean through a fully-cold round is **settled** and stops
+  One-way fixed once and then through a fully-cold round with no new One-way or
+  Significant in that area is **settled** and stops
   gating, **but its area's One-way count persists across banking**: banking suspends
   gating, it does not erase history, so a second One-way in a previously-banked area still
   escalates (otherwise a hard subsystem oscillates fix/clean/bank/new-One-way forever).
 - **Significant:** **always another round** (the change is big enough to verify in the
-  plan), then **settled** once a fully-cold round finds nothing new in that area. Never
+  plan), then **settled** once a fully-cold round finds no new One-way or Significant in that
+  area; new Mediums or Minors there do not hold it open. Never
   deferred. A **third** Significant in one area across the run **escalates**: the
   still-open behaviors are pinned with test obligations and the user chooses the
   simplification, rather than the loop re-fixing the area in prose a fourth time.
@@ -227,7 +229,7 @@ change**. Mediums and Minors may remain; they do not gate (they become test obli
 The assessor then emits the **test-obligation list**, the orchestrator writes it into the
 plan (section 9), and the plan is marked Reviewed. A round that made any one-way or
 significant change is never the last round: that change must be verified by a clean cold
-pass first. A third exit exists: if an area meets an escalation test (a second or
+pass first, meaning no new one-way or significant finding in that area. A third exit exists: if an area meets an escalation test (a second or
 unsettleable one-way *decision*, or a third Significant), the assessor returns `Escalate` and the loop stops for a
 user architecture decision instead of converging or looping.
 

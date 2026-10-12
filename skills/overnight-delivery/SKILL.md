@@ -32,7 +32,7 @@ This drafts a phased implementation plan based on the approved PRD. The plan is 
 
 Run `/plan-review context/[Feature]/implementation-plan.md` and let it run to convergence. Do not pick a round count. plan-review loops internally: each round runs the cold lenses, a grader rates every finding by reversibility (One-way / Significant / Medium / Minor, or discards it as Not-an-issue with evidence), the orchestrator fixes everything, and a cold assessor decides each round: converged, another round, or escalate. The exit condition decides when to stop, and the loop is bounded (the assessor escalates at round 5 rather than running on).
 
-Why convergence beats a fixed number: a one-way door or significant change is never the last round (it must be settled, then verified by a clean cold pass), while reversible defects (Mediums/Minors) never gate at all, they are handed to code+tests as test obligations instead of being looped on. The loop stops when a round has no open one-way door and no significant change.
+Why convergence beats a fixed number: a one-way door or significant change is never the last round (it must be settled, then verified by a cold pass with no new One-way or Significant in that area), while reversible defects (Mediums/Minors) never gate at all, they are handed to code+tests as test obligations instead of being looped on. The loop stops when a round has no open one-way door and no significant change.
 
 What to rely on (plan-review owns the mechanics):
 - **Cold start every round.** The `review-log.md` sidecar is withheld from reviewers, so a late round scrutinizes the plan as hard as the first.
