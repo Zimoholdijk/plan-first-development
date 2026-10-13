@@ -110,64 +110,53 @@ Medium/Low/Info findings skip validation (the quote gate already filtered fabric
 
 ## Step 6: Consolidate and present
 
-Present the results to the user in this format, listing only the reviewers that ran (note skipped ones and why in one line under the heading):
+Present the results to the user in this format. Write it in plain English: short sentences, everyday words, and any technical term explained the first time it appears. The reader may never have seen this code.
 
 ```
-## Full Code Review Results
+## Code Review
 
-Roster: [N of 7 — one line on what ran and what was skipped, with the Step 2 evidence]
+**What this change does:** [two or three sentences]
 
-### Security Review: [verdict]
-[Findings by severity, highest first; each with its Evidence quote and validation mark]
+Roster: [N of 7, one line on what ran and what was skipped, with the Step 2 evidence]
+Lenses: Security [verdict], Backend [verdict], Frontend [verdict], Architecture [verdict], Documentation [verdict], Regression [verdict], Testing [verdict]   ("not run: <reason>" for a skipped lens)
 
-### Backend Review: [verdict]
-[Findings by severity, highest first]
+### Must fix
+1. **[Plain-English title]** (`file:line`) [✓ validated / validation degraded] [corroborated by: reviewers, if more than one flagged it]
+   - **What this is:** what this code does, in one or two sentences.
+   - **Problem:** the concrete case: what input or situation leads to what wrong result.
+   - **Fix:** the smallest fix that works.
+   - **If we skip it:** what happens in practice.
 
-### Frontend Review: [verdict]
-[Findings by severity, highest first]
+### Should fix
+[same four-part format, numbering continues]
 
-### Architecture & Quality Review: [verdict]
-[Findings by severity, highest first]
+### Nice to have
+[same four-part format, numbering continues]
 
-### Documentation Review: [verdict]
-[Findings by severity, highest first]
+### Needs your call
+[Findings that contradict a recorded decision (plan Architecture Decisions, CLAUDE.md, or the Trade-off Decisions in progress.md), deletions the regression reviewer marked Unclear, and anything genuinely ambiguous. One line each with the question for the user.]
 
-### Regression Review: [verdict]
-[Deletions by classification: Likely regression first, then Unclear, then Intentional]
+### Tests
+[The test run: command, pass/fail counts, failing tests, and whether each failure is caused by this branch. If the suite could not run, say so.]
 
-### Testing Review: [verdict]
-[Coverage findings by severity, highest first. Then the test-run result: command,
-pass/fail counts, any failing tests, and whether each failure is a branch regression.]
-
----
-
-### Corroborated findings
-[Findings multiple reviewers flagged independently — highest confidence, listed once
-with all flagging reviewers named]
-
-### Pre-existing (non-blocking)
-[Findings not introduced by this branch; candidates for tickets or Deferred Items,
-not pre-commit fixes]
+### Pre-existing (not from this change)
+[Findings this change did not introduce: candidates for tickets or Deferred Items, not pre-commit fixes. One line each.]
 
 ### Discarded
-[Every finding removed by the pipeline, one line each:
-"[reviewer] [severity] [file]: [title] — citation not found | failed validation: [reason]"]
+[Every finding the pipeline removed, one line each:
+"[reviewer] [severity] [file]: [title]: citation not found | failed validation: [reason]"]
 
-### My assessment
-[Your critical judgment on the surviving findings:
-- Which findings should definitely be fixed before committing?
-- Which are valid but acceptable for now (document why)?
-- Which contradict an explicit decision in the plan's Architecture Decisions,
-  CLAUDE.md, or the tradeoff log (the reviewer missed existing context)?]
-
-### Recommended actions
-[Numbered list of concrete changes to make, ordered by priority]
+Verdict: Ship. | Verdict: fix [numbers] first.
+Lean: -[N] lines possible.   (only when lean findings exist)
+Not checked: [one line, only if something mattered and could not be checked]
 ```
+
+Severity maps to the groups: Critical and High go under **Must fix**, Medium under **Should fix**, Low under **Nice to have**; Info findings are dropped from the list. Number findings across all groups so the user can say "fix 2 and 5". Skip empty groups. If nothing survives, write the summary, `Looks good. Ship.`, and one line on what was checked.
 
 **Important:**
 - Exercise critical judgment on what remains, but the evidence-level filtering is already done: do not re-argue validated findings, and do not resurrect discarded ones without new evidence.
-- Treat the regression reviewer's "Likely regression" entries as Critical findings. Deletions of load-bearing behavior are not stylistic choices.
-- Treat a red test suite caused by this branch, or new logic shipping with no test, as a Critical finding, not a nitpick. "It works when I click around" is not a substitute for an automated test. If the Testing reviewer could not run the suite, surface that as an open item rather than assuming green.
+- Treat the regression reviewer's "Likely regression" entries as **Must fix**. Deletions of load-bearing behavior are not stylistic choices.
+- Treat a red test suite caused by this branch, or new logic shipping with no test, as **Must fix**, not a nitpick. "It works when I click around" is not a substitute for an automated test. If the Testing reviewer could not run the suite, surface that as an open item rather than assuming green.
 - Surface trade-offs to the user: do NOT silently accept or dismiss findings. Let the user decide on anything ambiguous.
 
 ## Full scope adjustments

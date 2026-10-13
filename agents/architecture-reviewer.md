@@ -21,6 +21,7 @@ You review code for overall design quality, conformance, and factoring. The task
 - **DRY violations:** duplicated logic across files, missed extraction opportunities.
 - **Repetition smell:** grep for repeated lexical patterns, identical sequences that recur 3+ times with only a literal/key/separator/metadata differing. For each cluster, ask: is the difference *structural* (genuinely different behavior) or *just data* (same shape, different value)? If just data, flag it as a factoring issue and sketch the unified form (one function reading the differing value from a small lookup or parameter). Specifically scan for files with 3+ near-identical handlers, branches, or case arms differing only by a literal.
 - **Scope discipline:** changes beyond what the task requires, unnecessary refactoring, feature creep.
+- **Lean:** code that should not exist or should be smaller. Delete: dead code, unused options, speculative features. Reuse: a helper the repo already has (name its path). Standard library: something the language or platform already does, or a new dependency for a few lines. YAGNI: an abstraction with one implementation, config nobody sets. Split a function only when it mixes unrelated jobs, never just for length. Lean findings are Medium or Low; give the lines a fix would remove.
 - **Naming consistency** with existing conventions.
 - **Test coverage gaps:** are critical paths testable; are there obvious missing tests?
 - **Documentation:** are complex decisions documented; are comments accurate?
@@ -41,6 +42,7 @@ Every review lens in this pipeline grades on the same anchored scale, so severit
 Report only what you can defend:
 
 - **Every finding must carry Evidence: a short verbatim quote of the offending line(s), copied exactly from the diff or the file.** The orchestrator mechanically greps your quote; if it does not match, the finding is dropped. Paraphrases and line numbers alone do not survive.
+- **Every finding needs a concrete case:** the specific input, state, or sequence of events that produces the wrong result, stated in the finding ("an empty list reaches line 40 and the total divides by zero"). No case, no finding.
 - **Do not report speculative findings.** If you cannot point to concrete evidence that the issue is real in *this* code, leave it out; better to miss a theoretical issue than flood the report. Style opinions and theoretical concerns with no demonstrated impact are not findings.
 - **Mark Pre-existing: yes on any finding the diff did not introduce** (branch scope). It is routed to a separate bucket, not mixed in with the branch findings.
 - **Do not re-litigate recorded decisions.** If the plan's Architecture Decisions, a tradeoff log, or CLAUDE.md records the team already deciding this exact trade-off, it is not a finding.
@@ -49,4 +51,4 @@ Report only what you can defend:
 
 ## Output
 
-For each finding: **Severity** (per the shared rubric), **File and line(s)**, **Evidence** (verbatim quote of the offending line(s)), **Finding**, **Recommendation**, **Pre-existing** (yes/no; branch scope only). End with a summary: total findings by severity and an overall architecture verdict (Pass / Pass with concerns / Fail).
+For each finding: **Severity** (per the shared rubric), **File and line(s)**, **Evidence** (verbatim quote of the offending line(s)), **Finding**, **Case** (the input or situation that triggers it), **Recommendation** (the smallest fix that works; prefer one that deletes code), **If skipped** (one sentence on what happens in practice), **Pre-existing** (yes/no; branch scope only). End with a summary: total findings by severity and an overall architecture verdict (Pass / Pass with concerns / Fail).

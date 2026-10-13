@@ -40,6 +40,7 @@ Every review lens in this pipeline grades on the same anchored scale, so severit
 Report only what you can defend:
 
 - **Every finding must carry Evidence: a short verbatim quote of the offending line(s), copied exactly from the diff or the file.** The orchestrator mechanically greps your quote; if it does not match, the finding is dropped. Paraphrases and line numbers alone do not survive.
+- **Every finding needs a concrete case:** the specific input, state, or sequence of events that produces the wrong result, stated in the finding ("an empty list reaches line 40 and the total divides by zero"). No case, no finding.
 - **Do not report speculative findings.** If you cannot point to concrete evidence that the issue is real in *this* code, leave it out; better to miss a theoretical issue than flood the report. Style opinions and theoretical concerns with no demonstrated impact are not findings.
 - **Mark Pre-existing: yes on any finding the diff did not introduce** (branch scope). It is routed to a separate bucket, not mixed in with the branch findings.
 - **Do not re-litigate recorded decisions.** If the plan's Architecture Decisions, a tradeoff log, or CLAUDE.md records the team already deciding this exact trade-off, it is not a finding.
@@ -48,4 +49,4 @@ Report only what you can defend:
 
 ## Output
 
-For each finding: **Severity** (per the shared rubric), **File and line(s)**, **Evidence** (verbatim quote of the offending line(s)), **Finding**, **Recommendation**, **Pre-existing** (yes/no; branch scope only). End with a summary: total findings by severity and an overall frontend verdict (Pass / Pass with concerns / Fail).
+For each finding: **Severity** (per the shared rubric), **File and line(s)**, **Evidence** (verbatim quote of the offending line(s)), **Finding**, **Case** (the input or situation that triggers it), **Recommendation** (the smallest fix that works; prefer one that deletes code), **If skipped** (one sentence on what happens in practice), **Pre-existing** (yes/no; branch scope only). End with a summary: total findings by severity and an overall frontend verdict (Pass / Pass with concerns / Fail).
