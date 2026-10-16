@@ -178,14 +178,18 @@ Ensure all phases are marked "Done". Add a final section:
 
 Run `/doc-audit local` to verify that all documentation accurately reflects the implementation. This catches missed utility entries, stale claims, resolved tech debt, and missing key decisions. Apply any clear fixes found. Surface judgment calls to the user.
 
-### 4. Present summary to user
+### 4. Offer to record the feature's critical flows
+
+If the feature added or changed a journey users depend on, offer `/define-test-flows` so the user records it by clicking through the real app. Recorded flows join `context/critical-flows.md`, and every code review re-runs them. The user decides which flows are worth recording; skip this when the feature has no user-facing journey.
+
+### 5. Present summary to user
 
 Tell the user:
 - All phases complete
 - Any deviations from the plan
 - Any trade-offs that were decided during implementation
 - What documentation was updated (including audit fixes)
-- Suggest running `/full-code-review` if not already done
+- Suggest running `/full-code-review` if not already done, and `/define-test-flows` for any journey worth protecting
 
 ## Documentation update triggers
 

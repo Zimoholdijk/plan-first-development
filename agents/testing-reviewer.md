@@ -19,6 +19,7 @@ For every changed source file with logic (not pure config, types, or styling), c
 - **Happy-path-only tests** when the change introduces error states, auth boundaries, or edge cases is a finding, name the uncovered case.
 - **Assertions that don't actually assert** the changed behavior (snapshot-only, or asserting on a mock instead of real output) is a finding.
 - **Critical flows covered only manually** (the plan's Verification list has no matching automated test) is a finding.
+- **A recorded critical flow broken by this change** (a test listed in `context/critical-flows.md` fails because of the diff) is Critical.
 
 In full scope, map the major modules/features against the tests that exist and report the coverage gaps, untested subsystems, and whole areas (auth, data integrity, access control) with thin or no coverage.
 
@@ -27,7 +28,7 @@ In full scope, map the major modules/features against the tests that exist and r
 You are the **only** agent in this review permitted to execute project code — the other reviewers are restricted to read-only git inspection precisely so your suite run has any shared test state (a database, fixtures, ports) to itself. Run the suite **once**, deliberately; do not re-run it speculatively.
 
 1. Determine the test command from `CLAUDE.md` or the project's manifest or task runner (`package.json`, `Makefile`, `pyproject.toml`, …) and run the **full** suite. Report the exact command and the exact result (pass/fail counts, failing test names).
-2. If there is an e2e suite (e.g. Playwright) and the environment allows (a dev server / base URL is reachable), run it too. If it cannot run here, say so explicitly rather than claiming it passed.
+2. If there is an e2e suite (e.g. Playwright) and the environment allows (a dev server / base URL is reachable), run it too, and always include every test listed in `context/critical-flows.md`. Those are the journeys the user recorded as must-never-break; report each one's result by name. If they cannot run here, say so explicitly rather than claiming they passed.
 3. If tests fail, capture the output and determine whether the failure is caused by this branch (a real regression) or is pre-existing/environmental. Do not fix anything, report.
 4. If there is **no runnable suite at all**, that is the top finding: the change shipped with no way to verify it automatically.
 

@@ -9,7 +9,7 @@ argument-hint: "[project name, e.g. 'task-tracker' or 'my-app']"
 
 You are setting up a new project: $ARGUMENTS
 
-This skill creates the full project scaffolding: context directory, CLAUDE.md rules, overview doc, and working agreements, based on battle-tested conventions. It produces files that the other skills (`/discuss-feature`, `/write-prd`, `/discuss-plan`, `/write-plan`, `/plan-review`, `/implement-plan`, `/write-e2e-tests`, `/full-code-review`, `/doc-audit`, `/overnight-delivery`) depend on.
+This skill creates the full project scaffolding: context directory, CLAUDE.md rules, overview doc, and working agreements, based on battle-tested conventions. It produces files that the other skills (`/discuss-feature`, `/write-prd`, `/discuss-plan`, `/write-plan`, `/plan-review`, `/implement-plan`, `/write-e2e-tests`, `/define-test-flows`, `/full-code-review`, `/doc-audit`, `/overnight-delivery`) depend on.
 
 ---
 
@@ -153,7 +153,7 @@ This file contains project-specific rules that Claude must follow. Create it wit
 Omit this section only if the project has no board; discuss-feature then asks once whether to file a ticket and where (suggesting the default tracker from `~/.claude/CLAUDE.md`, if one is named); if the user says no, it just delivers the decision summary.]
 
 ## Workflow Skills
-The plan-first skills are available: `/discuss-feature`, `/write-prd`, `/discuss-plan`, `/write-plan`, `/plan-review`, `/research`, `/implement-plan`, `/write-e2e-tests`, `/full-code-review`, `/doc-audit`, `/tradeoff-review`, `/discuss-simply`, `/overnight-delivery`. For anything non-trivial, walk the user through the planning workflow (optionally `/discuss-feature` first, then PRD, then `/discuss-plan`, then implementation plan, then implementation, with tests written as each phase lands) before writing code. The plugin also bundles the Playwright MCP (`mcp__playwright__*` browser tools) that `/write-e2e-tests` uses to drive a real browser.
+The plan-first skills are available: `/discuss-feature`, `/write-prd`, `/discuss-plan`, `/write-plan`, `/plan-review`, `/research`, `/implement-plan`, `/write-e2e-tests`, `/full-code-review`, `/doc-audit`, `/tradeoff-review`, `/discuss-simply`, `/overnight-delivery`, `/define-test-flows`. For anything non-trivial, walk the user through the planning workflow (optionally `/discuss-feature` first, then PRD, then `/discuss-plan`, then implementation plan, then implementation, with tests written as each phase lands) before writing code. The plugin also bundles the Playwright MCP (`mcp__playwright__*` browser tools) that `/write-e2e-tests` uses to drive a real browser.
 ```
 
 **Important:** Only include sections that are relevant. If there's no database, omit the Database section. If the tech stack is simple, keep it brief. The CLAUDE.md should grow organically as conventions are established. Don't front-load rules that haven't been tested yet.
@@ -324,6 +324,7 @@ Check that these companion skills are available (as personal skills in `~/.claud
 | `research` | Research sub-agent for technical questions / best practices (docs-first, then reputable sources), grounded in the repo and plans | Any time a "what's the right way?" question surfaces |
 | `implement-plan` | Phase-by-phase implementation | After plan approval |
 | `write-e2e-tests` | Write & run Playwright browser tests via the bundled Playwright MCP | After/while implementing user-facing flows |
+| `define-test-flows` | The user records the journeys the product must never break; each becomes a test every code review re-runs | After a feature ships, or once the app has something to click through |
 | `full-code-review` | Parallel code review with up to 7 reviewers, incl. a testing reviewer that runs the suite (branch diff or `full` codebase health check) | After implementation; periodically with `full` |
 | `doc-audit` | Documentation vs. codebase audit | After implementation |
 | `overnight-delivery` | End-to-end PRD-to-code pipeline | Full feature delivery |
@@ -357,7 +358,8 @@ Tell the user what was created:
 ### Next steps:
 1. Review `.claude/CLAUDE.md` and `context/overview.md`: adjust anything that doesn't match your project
 2. Create your first feature PRD with `/write-prd [feature name]`
-3. The overview and CLAUDE.md will grow organically as you build, don't front-load rules
+3. Once the app has something to click through, record the journeys it must never break with `/define-test-flows`
+4. The overview and CLAUDE.md will grow organically as you build, don't front-load rules
 ```
 
 ---

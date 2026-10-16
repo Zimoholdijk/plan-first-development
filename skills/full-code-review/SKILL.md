@@ -137,7 +137,7 @@ Lenses: Security [verdict], Backend [verdict], Frontend [verdict], Architecture 
 [Findings that contradict a recorded decision (plan Architecture Decisions, CLAUDE.md, or the Trade-off Decisions in progress.md), deletions the regression reviewer marked Unclear, and anything genuinely ambiguous. One line each with the question for the user.]
 
 ### Tests
-[The test run: command, pass/fail counts, failing tests, and whether each failure is caused by this branch. If the suite could not run, say so.]
+[The test run: command, pass/fail counts, failing tests, and whether each failure is caused by this branch. List each critical flow from `context/critical-flows.md` with its result. If the suite could not run, say so.]
 
 ### Pre-existing (not from this change)
 [Findings this change did not introduce: candidates for tickets or Deferred Items, not pre-commit fixes. One line each.]
@@ -156,7 +156,7 @@ Severity maps to the groups: Critical and High go under **Must fix**, Medium und
 **Important:**
 - Exercise critical judgment on what remains, but the evidence-level filtering is already done: do not re-argue validated findings, and do not resurrect discarded ones without new evidence.
 - Treat the regression reviewer's "Likely regression" entries as **Must fix**. Deletions of load-bearing behavior are not stylistic choices.
-- Treat a red test suite caused by this branch, or new logic shipping with no test, as **Must fix**, not a nitpick. "It works when I click around" is not a substitute for an automated test. If the Testing reviewer could not run the suite, surface that as an open item rather than assuming green.
+- Treat a red test suite caused by this branch, a broken critical flow, or new logic shipping with no test, as **Must fix**, not a nitpick. "It works when I click around" is not a substitute for an automated test. If the Testing reviewer could not run the suite, surface that as an open item rather than assuming green.
 - Surface trade-offs to the user: do NOT silently accept or dismiss findings. Let the user decide on anything ambiguous.
 
 ## Full scope adjustments

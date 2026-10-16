@@ -11,6 +11,8 @@ You are writing and running end-to-end browser tests for: $ARGUMENTS
 
 This skill uses the **Playwright MCP** (bundled with this plugin, exposed as `mcp__playwright__*` browser tools) to drive a real browser, verify the flow actually works, and then capture that behavior as durable Playwright spec files. Live MCP exploration is how you confirm the test is correct before committing it; the spec file is the deliverable that keeps the behavior covered.
 
+For the journeys the whole product depends on, prefer `/define-test-flows`: the user records the path by clicking through, so the test follows the route real users take. This skill is for the tests a feature needs during implementation.
+
 ## Rules
 
 These rules are non-negotiable:
